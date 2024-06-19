@@ -1,0 +1,536 @@
+---
+title: "Project 2 R Code"
+author: "Vibhuti Gandhi"
+date: "2023-11-30"
+output:
+pdf_document: default
+html_document: default
+---
+  
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+I read and acknowledge the SFU student academic integrity given here - https://www.sfu.ca/policies/gazette/student/s10-01.html
+
+Load Required Packages - 
+```{r}
+#assumption: the following packages have already been installed
+library(mlbench) # For loading the dataset
+library(tidyverse)
+library(dplyr)
+library(caTools) # For Logistic regression
+library(pROC) # For ROC curve
+library(FNN) # For KNN
+library(MASS) # For LDA
+library(e1071) # For SVM
+```
+
+Load the data set-
+```{r}
+data(PimaIndiansDiabetes)
+```
+
+Viewing the dimensions-
+```{r}
+dim(PimaIndiansDiabetes)
+```
+
+Viewing the summary-
+```{r}
+summary(PimaIndiansDiabetes)
+```
+
+Viewing the top 5 rows-
+```{r}
+head(PimaIndiansDiabetes, 5)
+```
+
+Running set.seed() to create reproducible results -
+```{r}
+set.seed(2023)
+```
+
+Implementing a test-train split -
+```{r}
+split <- sample.split(PimaIndiansDiabetes, SplitRatio = 0.8) 
+
+train_df <- subset(PimaIndiansDiabetes, split == "TRUE") 
+test_df <- subset(PimaIndiansDiabetes, split == "FALSE") 
+```
+
+Dimensions of training dataset -
+```{r}
+dim(train_df)
+```
+
+Dimensions of test dataset -
+```{r}
+dim(test_df)
+```
+
+Training a logistic regression model -
+```{r}
+log.fit = glm(diabetes~., train_df , family="binomial")
+summary(log.fit)
+```
+
+Making predictions on the test dataset -
+```{r}
+pred.log <- predict(log.fit, newdata = test_df[-9], type="response")
+```
+
+Converting predictions into binary variables-
+```{r}
+pred.log <- ifelse(pred.log > 0.5, 'pos', 'neg') 
+```
+
+Confusion Matrix-
+```{r}
+confusion.matrix.log <- table(pred.log, test_df[,9], dnn=c('Predicted', 'Observed'))
+print(confusion.matrix.log)
+```
+
+True positive, true Negative, false positive (Type 1 error),false negative (Type 2 error)-
+```{r}
+TN <- confusion.matrix.log[1,1]
+TP <- confusion.matrix.log[2,2]
+FP <- confusion.matrix.log[1,2]
+FN <- confusion.matrix.log[2,1]
+
+cat('True Negative:  ', TN, '\n')
+cat('True Positive:  ', TP, '\n')
+cat('False Positive: ', FP, '\n')
+cat('False Negative: ', FN)
+```
+
+Error metrics-
+```{r}
+#Formulae for missclass.log referenced from hw3_solution.pdf and model_accuracy, precision, recall, specificity, f1_score referenced from ISLR 2nd edition.
+missclass.log <- mean(pred.log != test_df[,9])
+model_accuracy <- (TP + TN) / (TP + TN + FP + FN)
+precision <- TP / (TP + FP)
+recall <- TP / (TP + FN)
+specificity <- TN / (TN + FP)
+f1_score <- 2 * ((precision * recall) / (precision + recall))
+
+cat("Misclassification Rate:        ", missclass.log, "\n")
+cat("Model Accuracy:                ", model_accuracy, "\n")
+cat("Precision:                     ", precision, "\n")
+cat("Recall:                        ", recall, "\n")
+cat("Specificity:                   ", specificity, "\n")
+cat("F1 Score:                      ", f1_score, "\n")
+```
+
+Converting response variable to numeric 0s and 1s-
+```{r}
+test_df$diabetes <- ifelse(test_df$diabetes == 'pos', 1, 0)
+
+pred.log <- ifelse(pred.log == 'pos', 1, 0)
+```
+
+ROC-
+```{r}
+test_roc <- roc(test_df$diabetes ~ pred.log, 
+               plot = TRUE, 
+               print.auc = TRUE,
+               main ="ROC curve - Logistic regression ")
+grid()
+```
+
+Implementing a test-train split -
+```{r}
+split <- sample.split(PimaIndiansDiabetes, SplitRatio = 0.8) 
+
+train_df <- subset(PimaIndiansDiabetes, split == "TRUE") 
+test_df <- subset(PimaIndiansDiabetes, split == "FALSE") 
+```
+
+Splitting up the test and train variables-
+```{r}
+X.train.raw <- train_df[, -9]
+X.test.raw <- test_df[, -9]
+Y.train <- train_df[, 9]
+Y.test <- test_df[, 9]
+```
+
+Rescaling X values-
+```{r}
+knn.scaler <- function(x1, x2) {
+  for (col in 1:ncol(x1)) {
+    a <- mean(x2[, col])
+    b <- sd(x2[, col])
+    x1[, col] <- (x1[, col] - a) / b
+  }
+  x1
+}
+
+X.train <- knn.scaler(X.train.raw, X.train.raw)
+X.test <- knn.scaler(X.test.raw, X.train.raw) 
+```
+
+Training a KNN model with m=1 (or 1-NN model)-
+```{r}
+pred.knn <- knn(X.train, X.test, Y.train, k = 1)
+```
+
+Confusion Matrix-
+```{r}
+confusion.matrix.knn <- table(pred.knn, Y.test, dnn=c('Predicted', 'Observed'))
+print(confusion.matrix.knn)
+```
+
+True positive, true Negative, false positive (Type 1 error),false negative (Type 2 error)-
+```{r}
+TN <- confusion.matrix.knn[1,1]
+TP <- confusion.matrix.knn[2,2]
+FP <- confusion.matrix.knn[1,2]
+FN <- confusion.matrix.knn[2,1]
+
+cat('True Negative:  ', TN, '\n')
+cat('True Positive:  ', TP, '\n')
+cat('False Positive: ', FP, '\n')
+cat('False Negative: ', FN)
+```
+
+Error metrics-
+```{r}
+#Formulae for missclass.log and SE.missclass.log referenced from hw3_solution.pdf and model_accuracy, precision, recall, specificity, f1_score referenced from ISLR 2nd edition.
+missclass.log <- mean(pred.knn != Y.test)
+model_accuracy <- (TP + TN) / (TP + TN + FP + FN)
+precision <- TP / (TP + FP)
+recall <- TP / (TP + FN)
+specificity <- TN / (TN + FP)
+f1_score <- 2 * ((precision * recall) / (precision + recall))
+
+cat("Misclassification Rate:        ", missclass.log, "\n")
+cat("Model Accuracy:                ", model_accuracy, "\n")
+cat("Precision:                     ", precision, "\n")
+cat("Recall:                        ", recall, "\n")
+cat("Specificity:                   ", specificity, "\n")
+cat("F1 Score:                      ", f1_score, "\n")
+```
+
+Converting response variable to numeric 0s and 1s-
+```{r}
+Y.test <- ifelse(Y.test == 'pos', 1, 0)
+
+pred.knn <- ifelse(pred.knn == 'pos', 1, 0)
+```
+
+ROC-
+```{r}
+test_roc <- roc(Y.test ~ pred.knn, 
+               plot = TRUE, 
+               print.auc = TRUE,
+               main ="ROC curve - KNN")
+grid()
+```
+
+Implementing a test-train split -
+```{r}
+split <- sample.split(PimaIndiansDiabetes, SplitRatio = 0.8) 
+
+train_df <- subset(PimaIndiansDiabetes, split == "TRUE") 
+test_df <- subset(PimaIndiansDiabetes, split == "FALSE") 
+```
+
+Splitting up the test and train variables-
+```{r}
+X.train.da <- train_df[, -9]
+X.test.da <- test_df[, -9]
+Y.train <- train_df[, 9]
+Y.test <- test_df[, 9]
+```
+
+Rescaling X values-
+```{r}
+lda.scaler <- function(x1, x2) {
+  for (col in 1:ncol(x1)) {
+    a <- mean(x2[, col])
+    b <- sd(x2[, col])
+    x1[, col] <- (x1[, col] - a) / b
+  }
+  x1
+}
+
+X.train <- lda.scaler(X.train.da, X.train.da)
+X.test <- lda.scaler(X.test.da, X.train.da) 
+```
+
+Training a LDA model-
+```{r}
+fit.lda <- lda(X.train, Y.train)
+pred.lda <- predict(fit.lda, X.test)$class
+```
+
+Confusion Matrix-
+```{r}
+confusion.matrix.lda <- table(pred.lda, Y.test, dnn=c('Predicted', 'Observed'))
+print(confusion.matrix.lda)
+```
+
+True positive, true Negative, false positive (Type 1 error),false negative (Type 2 error)-
+```{r}
+TN <- confusion.matrix.lda[1,1]
+TP <- confusion.matrix.lda[2,2]
+FP <- confusion.matrix.lda[1,2]
+FN <- confusion.matrix.lda[2,1]
+
+cat('True Negative:  ', TN, '\n')
+cat('True Positive:  ', TP, '\n')
+cat('False Positive: ', FP, '\n')
+cat('False Negative: ', FN)
+```
+
+Error metrics-
+```{r}
+#Formulae for missclass.log and SE.missclass.log referenced from hw3_solution.pdf and model_accuracy, precision, recall, specificity, f1_score referenced from ISLR 2nd edition.
+missclass.log <- mean(pred.lda != Y.test)
+model_accuracy <- (TP + TN) / (TP + TN + FP + FN)
+precision <- TP / (TP + FP)
+recall <- TP / (TP + FN)
+specificity <- TN / (TN + FP)
+f1_score <- 2 * ((precision * recall) / (precision + recall))
+
+cat("Misclassification Rate:        ", missclass.log, "\n")
+cat("Model Accuracy:                ", model_accuracy, "\n")
+cat("Precision:                     ", precision, "\n")
+cat("Recall:                        ", recall, "\n")
+cat("Specificity:                   ", specificity, "\n")
+cat("F1 Score:                      ", f1_score, "\n")
+```
+
+Converting response variable to numeric 0s and 1s-
+```{r}
+Y.test <- ifelse(Y.test == 'pos', 1, 0)
+
+pred.lda <- ifelse(pred.lda == 'pos', 1, 0)
+```
+
+ROC-
+```{r}
+test_roc <- roc(Y.test ~ pred.lda, 
+               plot = TRUE, 
+               print.auc = TRUE,
+               main ="ROC curve - LDA")
+grid()
+```
+
+
+
+
+
+
+Example of SVM-
+
+Relationship between age and glucose -
+```{r}
+PimaIndiansDiabetes %>% 
+  ggplot(aes(x = glucose, 
+             y = age, 
+             color = as.factor(diabetes)))+
+  geom_point()+ 
+  ggtitle("glucose vs age") +
+  labs(x = "glucose",
+       y = "age", 
+       colour = "Diabetes")+ 
+  theme(plot.title = element_text(hjust = 0.5))
+```
+
+Creating a matrix of age and glucose-
+```{r}
+x_glucose_age <- PimaIndiansDiabetes %>% 
+  dplyr::select(glucose, age) %>% 
+  as.matrix()
+
+head(x_glucose_age, 5)
+```
+
+Implementing a test-train split -
+```{r}
+split <- sample.split(PimaIndiansDiabetes, SplitRatio = 0.8) 
+
+train_df <- subset(PimaIndiansDiabetes, split == "TRUE") 
+test_df <- subset(PimaIndiansDiabetes, split == "FALSE") 
+
+x_glucose_age_train <- subset(x_glucose_age, split == "TRUE") 
+x_glucose_age_test <- subset(x_glucose_age, split == "FALSE") 
+```
+
+```{r}
+glucose <- seq(from = min(PimaIndiansDiabetes$glucose), 
+                  to = max(PimaIndiansDiabetes$glucose), 
+                  length = 100)
+
+age <- seq(from = min(PimaIndiansDiabetes$age), 
+                   to = max(PimaIndiansDiabetes$age), 
+                   length = 100)
+
+fine_grid_glucose_age <- as.data.frame(expand.grid(glucose, age))
+
+
+fine_grid_glucose_age <- fine_grid_glucose_age %>%
+  dplyr::rename(glucose = "Var1", age = "Var2")
+```
+
+```{r}
+fit.svm <- svm(x = x_glucose_age, 
+               y = PimaIndiansDiabetes$diabetes, 
+               type = "C-classification", kernel = "radial")
+
+fine_grid_glucose_age$diabetes_pred <- predict(fit.svm, newdata = fine_grid_glucose_age, type = "decision")
+```
+
+```{r}
+ggplot() +
+  geom_point(data = fine_grid_glucose_age, aes(x = glucose, y = age, colour = diabetes_pred), alpha = 0.25) + 
+  geom_contour(data = fine_grid_glucose_age, aes(x = glucose, y = age, z = as.integer(diabetes_pred)),
+               lineend = "round", linejoin = "round", linemitre = 1, size = 0.25, color = "lightblue", bins = 10) + 
+  geom_point(data = PimaIndiansDiabetes, aes(x = glucose, y = age, colour = diabetes)) +
+  ggtitle("SVM decision boundaries for glucose vs. age") +
+  labs(x = "glucose", y = "age", colour = "Diabetes") +
+  theme(plot.title = element_text(hjust = 0.5))
+```
+
+Training SVM-
+
+Do a test-train split-
+```{r}
+split <- sample.split(PimaIndiansDiabetes, SplitRatio = 0.8) 
+
+train_df <- subset(PimaIndiansDiabetes, split == "TRUE") 
+test_df <- subset(PimaIndiansDiabetes, split == "FALSE") 
+```
+
+```{r}
+tune.svm <- tune(svm, diabetes~., data = train_df, 
+                 kernel = "radial",
+                 ranges = list(cost = c(0.1,1,10,100,1000),
+                               gamma = c(0.5,1,2,3,4,5)))
+```
+
+```{r}
+svm.fit <- tune.svm$best.model
+svm.fit
+```
+
+```{r}
+pred.svm = predict(svm.fit, test_df[,-9])
+```
+
+
+Confusion Matrix-
+```{r}
+confusion.matrix.svm <- table(pred.svm, test_df$diabetes, dnn=c('Predicted', 'Observed'))
+print(confusion.matrix.svm)
+```
+
+True positive, true Negative, false positive (Type 1 error),false negative (Type 2 error)-
+```{r}
+TN <- confusion.matrix.svm[1,1]
+TP <- confusion.matrix.svm[2,2]
+FP <- confusion.matrix.svm[1,2]
+FN <- confusion.matrix.svm[2,1]
+
+cat('True Negative:  ', TN, '\n')
+cat('True Positive:  ', TP, '\n')
+cat('False Positive: ', FP, '\n')
+cat('False Negative: ', FN)
+```
+
+Error metrics-
+```{r}
+#Formulae for missclass.log and SE.missclass.log referenced from hw3_solution.pdf and model_accuracy, precision, recall, specificity, f1_score referenced from ISLR 2nd edition.
+missclass.log <- mean(pred.svm != test_df$diabetes)
+model_accuracy <- (TP + TN) / (TP + TN + FP + FN)
+precision <- TP / (TP + FP)
+recall <- TP / (TP + FN)
+specificity <- TN / (TN + FP)
+f1_score <- 2 * ((precision * recall) / (precision + recall))
+
+cat("Misclassification Rate:        ", missclass.log, "\n")
+cat("Model Accuracy:                ", model_accuracy, "\n")
+cat("Precision:                     ", precision, "\n")
+cat("Recall:                        ", recall, "\n")
+cat("Specificity:                   ", specificity, "\n")
+cat("F1 Score:                      ", f1_score, "\n")
+```
+
+Converting response variable to numeric 0s and 1s-
+```{r}
+test_df$diabetes <- ifelse(test_df$diabetes == 'pos', 1, 0)
+
+pred.svm <- ifelse(pred.svm == 'pos', 1, 0)
+```
+
+ROC-
+```{r}
+test_roc <- roc(test_df$diabetes ~ pred.svm, 
+               plot = TRUE, 
+               print.auc = TRUE,
+               main ="ROC curve - SVM")
+grid()
+```
+
+Sample Code-
+```{r}
+split <- sample.split(PimaIndiansDiabetes, SplitRatio = 0.8) 
+train_df <- subset(PimaIndiansDiabetes, split == "TRUE") 
+test_df <- subset(PimaIndiansDiabetes, split == "FALSE") 
+
+svm.fit.1 <- svm(diabetes ~., train_df,
+                 type = "C-classification", kernel = "radial",
+                 cost = 10, gamma = 0.5)
+pred.svm.1 = predict(svm.fit.1, test_df[,-9])
+
+test_df$diabetes <- ifelse(test_df$diabetes == 'pos', 1, 0)
+pred.svm.1 <- ifelse(pred.svm.1 == 'pos', 1, 0)
+
+test_roc <- roc(test_df$diabetes ~ pred.svm.1, 
+               plot = TRUE, 
+               print.auc = TRUE,
+               main ="ROC curve - SVM")
+grid()
+```
+
+
+```{r}
+split <- sample.split(PimaIndiansDiabetes, SplitRatio = 0.8) 
+train_df <- subset(PimaIndiansDiabetes, split == "TRUE") 
+test_df <- subset(PimaIndiansDiabetes, split == "FALSE") 
+
+svm.fit.2 <- svm(diabetes ~., train_df,
+                 type = "C-classification", kernel = "radial",
+                 cost = 50, gamma = 0.5)
+svm.fit.2 = predict(svm.fit.2, test_df[,-9])
+
+test_df$diabetes <- ifelse(test_df$diabetes == 'pos', 1, 0)
+svm.fit.2 <- ifelse(svm.fit.2 == 'pos', 1, 0)
+
+test_roc <- roc(test_df$diabetes ~ svm.fit.2, 
+               plot = TRUE, 
+               print.auc = TRUE,
+               main ="ROC curve - SVM")
+grid()
+```
+
+```{r}
+split <- sample.split(PimaIndiansDiabetes, SplitRatio = 0.8) 
+train_df <- subset(PimaIndiansDiabetes, split == "TRUE") 
+test_df <- subset(PimaIndiansDiabetes, split == "FALSE") 
+
+svm.fit.3 <- svm(diabetes ~., train_df,
+                 type = "C-classification", kernel = "radial",
+                 cost = 50, gamma = 1)
+svm.fit.3 = predict(svm.fit.3, test_df[,-9])
+
+test_df$diabetes <- ifelse(test_df$diabetes == 'pos', 1, 0)
+svm.fit.3 <- ifelse(svm.fit.3 == 'pos', 1, 0)
+
+test_roc <- roc(test_df$diabetes ~ svm.fit.3, 
+               plot = TRUE, 
+               print.auc = TRUE,
+               main ="ROC curve - SVM")
+grid()
+```
