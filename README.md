@@ -1,4 +1,4 @@
-# Enhancing Diabetes Prediction with Binary Classification Models and Support Vector Machines
+# Evaluating performance of Binary Classification Models and Support Vector Machines on Diabetes Prediction
 
 
 ## Project Summary
